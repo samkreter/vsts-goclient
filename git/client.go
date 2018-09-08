@@ -30,6 +30,7 @@ import (
 	"unicode/utf8"
 
 	"context"
+
 	"golang.org/x/oauth2"
 )
 
@@ -403,17 +404,27 @@ func (c *APIClient) prepareRequest(
 }
 
 func (c *APIClient) decode(v interface{}, b []byte, contentType string) (err error) {
-		if strings.Contains(contentType, "application/xml") {
-			if err = xml.Unmarshal(b, v); err != nil {
-				return err
-			}
-			return nil
-		} else if strings.Contains(contentType, "application/json") {
-			if err = json.Unmarshal(b, v); err != nil {
-				return err
-			}
-			return nil
+	type requestFormat struct {
+		Value interface{} `json:"value"`
+	}
+
+	var data requestFormat
+	if strings.Contains(contentType, "application/xml") {
+		if err = xml.Unmarshal(b, v); err != nil {
+			return err
 		}
+		return nil
+	} else if strings.Contains(contentType, "application/json") {
+		if err = json.Unmarshal(b, &data); err != nil {
+			fmt.Println("failed: ", err)
+			return err
+		}
+
+		fmt.Println(data.Value)
+
+		v = data.Value
+		return nil
+	}
 	return errors.New("undefined response type")
 }
 
