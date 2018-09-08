@@ -11,8 +11,8 @@ import (
 func main() {
 
 	cfg := vsts.NewConfiguration()
-	cfg.BasePath = "basepath"
 	client := vsts.NewAPIClient(cfg)
+	client.ChangeBasePath("https://youraccount.visualstudio.com")
 
 	auth := context.WithValue(context.Background(), vsts.ContextBasicAuth, vsts.BasicAuth{
 		UserName: "username",
