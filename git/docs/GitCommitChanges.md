@@ -1,0 +1,11 @@
+# GitCommitChanges
+
+## Properties
+Name | Type | Description | Notes
+------------ | ------------- | ------------- | -------------
+**ChangeCounts** | [***ChangeCountDictionary**](ChangeCountDictionary.md) |  | [optional] [default to null]
+**Changes** | [**[]GitChange**](GitChange.md) |  | [optional] [default to null]
+
+[[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
+
+
