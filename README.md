@@ -45,4 +45,6 @@ Then import the specific client:
 
 ### Contributing
 
-Please feel free to contribute! Bug fixes are more than welcome any time, as long as tests assert correct behavior. If you'd like to change an existing implementation or see a new feature, open an issue first so we can discuss it. Thanks to all contributors!
+Please feel free to contribute! Bug fixes are more than welcome any time.
+If you'd like to change an existing implementation or see a new feature,
+open an issue first so we can discuss it.
