@@ -21,7 +21,7 @@ Then import the specific client:
    ```go
        auth := context.WithValue(context.Background(), vstsgit.ContextBasicAuth, vstsgit.BasicAuth{
            UserName: "username",
-           Password: "passwordtoken",
+           Password: "personalAccessToken",
        })
    ```
 
