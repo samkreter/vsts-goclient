@@ -404,28 +404,20 @@ func (c *APIClient) prepareRequest(
 }
 
 func (c *APIClient) decode(v interface{}, b []byte, contentType string) (err error) {
-	type requestFormat struct {
-		Value interface{} `json:"value"`
+	type rawResponse struct {
+		Value json.RawMessage `json:"value"`
 	}
 
-	var data requestFormat
-	if strings.Contains(contentType, "application/xml") {
-		if err = xml.Unmarshal(b, v); err != nil {
-			return err
-		}
-		return nil
-	} else if strings.Contains(contentType, "application/json") {
-		if err = json.Unmarshal(b, &data); err != nil {
-			fmt.Println("failed: ", err)
-			return err
-		}
-
-		fmt.Println(data.Value)
-
-		v = data.Value
-		return nil
+	var rawResp rawResponse
+	if err = json.Unmarshal(b, &rawResp); err != nil {
+		return err
 	}
-	return errors.New("undefined response type")
+
+	if err = json.Unmarshal([]byte(rawResp.Value), &v); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Add a file to the multipart request
