@@ -10,7 +10,7 @@ Go get it:
 
 Then import the specific client:
 
-    import vstsgit "github.com/samkreter/vsts-goclient/git"
+    import vstsgit "github.com/samkreter/vsts-goclient/v2/git"
 
 ### Making a request
 
