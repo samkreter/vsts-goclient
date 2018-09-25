@@ -14,24 +14,35 @@ import (
 
 // Client implementation for the vsts client
 type Client struct {
-	Username                 string `json:"username"`
-	Token                    string `json:"token"`
-	Instance                 string `json:"instance"`
-	Project                  string `json:"project"`
-	Repo                     string `json:"repo"`
-	OnboardBuildDefinitionID int    `json:"onboardBuildDefinitionId"`
-	ReleaseBranchPrefix      string `json:"releaseBranchPrefix"`
+	Username                 string
+	Token                    string
+	Instance                 string
+	Project                  string
+	Repo                     string
+	ApiVersion               string
+	OnboardBuildDefinitionID int
+	ReleaseBranchPrefix      string
 	httpClient               *http.Client
 }
 
+type Config struct {
+	Token          string
+	Username       string
+	APIVersion     string
+	RepositoryName string
+	Project        string
+	Instance       string
+}
+
 // NewClient creates a new vsts client
-func NewClient(username, token, instance, project, repo string, httpClient *http.Client) (*Client, error) {
+func NewClient(httpClient *http.Client, config *Config) (*Client, error) {
 	return &Client{
-		Username:   username,
-		Token:      token,
-		Instance:   instance,
-		Project:    project,
-		Repo:       repo,
+		Username:   config.Username,
+		Token:      config.Token,
+		Instance:   config.Instance,
+		Project:    config.Project,
+		ApiVersion: config.APIVersion,
+		Repo:       config.RepositoryName,
 		httpClient: httpClient,
 	}, nil
 }
