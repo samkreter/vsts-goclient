@@ -68,7 +68,7 @@ type Config struct {
 }
 
 // NewClient creates a new vsts client
-func NewClient(httpClient *http.Client, config *Config) (*Client, error) {
+func NewClient(config *Config) (*Client, error) {
 	cfg := gitclient.NewConfiguration()
 	apiClient := gitclient.NewAPIClient(cfg)
 	apiClient.ChangeBasePath(fmt.Sprintf("https://%s", config.Instance))
@@ -80,8 +80,9 @@ func NewClient(httpClient *http.Client, config *Config) (*Client, error) {
 
 	// Note: Using the old version rest client until all api routes are updated to use the generated client
 	rClient := &restClient{
-		username: config.Username,
-		token:    config.Token,
+		username:   config.Username,
+		token:      config.Token,
+		httpClient: &http.Client{},
 	}
 
 	return &Client{

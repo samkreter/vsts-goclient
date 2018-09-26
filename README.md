@@ -8,11 +8,15 @@ Go get it:
 
     $ go get github.com/samkreter/vsts-goclient
 
-Then import the specific client:
+Either import to package up client:
 
-    import vstsgit "github.com/samkreter/vsts-goclient/v2/git"
+    import vstsClient "github.com/samkreter/vsts-goclient/client"
 
-### Making a request
+or import the specific api:
+
+    import vstsgit "github.com/samkreter/vsts-goclient/api/git"
+
+### Making a request with the direct api
 
 1. To authenticate, Get a VSTS personal access token. This can be generated on your account page under the security tab.
 
