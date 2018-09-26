@@ -2,29 +2,62 @@ package vsts
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	gitclient "github.com/samkreter/vsts-goclient/api/git"
 )
+
+type restClient struct {
+	username   string
+	token      string
+	httpClient *http.Client
+}
+
+func (c *restClient) Do(method, url string, body io.Reader) ([]byte, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(c.username, c.token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http error: %s", err)
+	}
+	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
+	}
+
+	return b, nil
+}
 
 // Client implementation for the vsts client
 type Client struct {
-	Username                 string
-	Token                    string
-	Instance                 string
-	Project                  string
-	Repo                     string
-	ApiVersion               string
-	OnboardBuildDefinitionID int
-	ReleaseBranchPrefix      string
-	httpClient               *http.Client
+	Instance   string
+	Project    string
+	Repo       string
+	APIVersion string
+	restClient *restClient
+	apiClient  *gitclient.APIClient
+	apiAuth    context.Context
 }
 
+// Config stores the configurations for the vsts client
 type Config struct {
 	Token          string
 	Username       string
@@ -35,15 +68,31 @@ type Config struct {
 }
 
 // NewClient creates a new vsts client
-func NewClient(httpClient *http.Client, config *Config) (*Client, error) {
+func NewClient(config *Config) (*Client, error) {
+	cfg := gitclient.NewConfiguration()
+	apiClient := gitclient.NewAPIClient(cfg)
+	apiClient.ChangeBasePath(fmt.Sprintf("https://%s", config.Instance))
+
+	auth := context.WithValue(context.Background(), gitclient.ContextBasicAuth, gitclient.BasicAuth{
+		UserName: config.Username,
+		Password: config.Token,
+	})
+
+	// Note: Using the old version rest client until all api routes are updated to use the generated client
+	rClient := &restClient{
+		username:   config.Username,
+		token:      config.Token,
+		httpClient: &http.Client{},
+	}
+
 	return &Client{
-		Username:   config.Username,
-		Token:      config.Token,
 		Instance:   config.Instance,
 		Project:    config.Project,
-		ApiVersion: config.APIVersion,
+		APIVersion: config.APIVersion,
 		Repo:       config.RepositoryName,
-		httpClient: httpClient,
+		apiClient:  apiClient,
+		apiAuth:    auth,
+		restClient: rClient,
 	}, nil
 }
 
@@ -59,29 +108,14 @@ func (c *Client) GetBranches(branchName string) (*Refs, error) {
 
 	urlString := r.Replace(getBranchURLTemplate)
 
-	req, err := http.NewRequest("GET", urlString, nil)
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("http error: %s", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
-	}
-
 	branches := &Refs{}
 
-	err = json.NewDecoder(resp.Body).Decode(branches)
+	err = json.Unmarshal(b, branches)
 	if err != nil {
 		return nil, fmt.Errorf("json decoding error: %s", err)
 	}
@@ -101,29 +135,14 @@ func (c *Client) GetBranch(branchName string) (*Ref, error) {
 
 	urlString := r.Replace(getBranchURLTemplate)
 
-	req, err := http.NewRequest("GET", urlString, nil)
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	branches := Refs{}
 
-	err = json.NewDecoder(resp.Body).Decode(&branches)
+	err = json.Unmarshal(b, &branches)
 	if err != nil {
 		return nil, err
 	}
@@ -163,26 +182,9 @@ func (c *Client) CreateBranch(newBranchName string, commitID string) error {
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode([]Branch{newBranch})
 
-	req, err := http.NewRequest("POST", urlString, body)
+	_, err := c.restClient.Do("POST", urlString, body)
 	if err != nil {
 		return err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	return nil
@@ -207,29 +209,14 @@ func (c *Client) GetCommits(branch string, startTime time.Time, endTime time.Tim
 
 	urlString := r.Replace(getCommitsURLTemplate)
 
-	req, err := http.NewRequest("GET", urlString, nil)
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	commits := &Commits{}
 
-	json.NewDecoder(resp.Body).Decode(commits)
+	json.Unmarshal(b, commits)
 	return commits, err
 }
 
@@ -247,31 +234,16 @@ func (c *Client) GetFileFromRepo(branchName string, filePath string, target inte
 
 	urlString := r.Replace(getItemURLTemplate)
 
-	req, err := http.NewRequest("GET", urlString, nil)
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return err
 	}
 
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
+	if err := json.Unmarshal(b, &target); err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
-	}
-
-	bodyText, _ := ioutil.ReadAll(resp.Body)
-
-	err = json.Unmarshal(bodyText, &target)
-
-	return err
+	return nil
 }
 
 // CommitChanges commits the staged commits
@@ -323,25 +295,9 @@ func (c *Client) CommitChanges(changes interface{}, branchName, commitID, change
 		return err
 	}
 
-	req, err := http.NewRequest("POST", urlString, body)
+	_, err = c.restClient.Do("POST", urlString, body)
 	if err != nil {
 		return err
-	}
-	req.SetBasicAuth(c.Username, c.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	fmt.Printf("INFO: Commit and pushed to branch %s\n", branchName)
@@ -361,30 +317,17 @@ func (c *Client) GetBuildDefinitions(definitionPath, definitionName string) (*De
 
 	urlString := r.Replace(getDefinitionsURLTemplate)
 
-	req, err := http.NewRequest("GET", urlString, nil)
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
-	}
-	req.SetBasicAuth(c.Username, c.Token)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	defs := &Definitions{}
-	err = json.NewDecoder(resp.Body).Decode(defs)
+	if err := json.Unmarshal(b, defs); err != nil {
+		return nil, err
+	}
 
-	return defs, err
+	return defs, nil
 }
 
 // GetBuilds returns the builds for a specific build definition
@@ -397,29 +340,14 @@ func (c *Client) GetBuilds(buildDefinitionID int) (*Builds, error) {
 		"{defID}", strconv.Itoa(buildDefinitionID))
 
 	urlString := r.Replace(getBuildsURLTemplate)
-	req, err := http.NewRequest("GET", urlString, nil)
+
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	builds := &Builds{}
-	err = json.NewDecoder(resp.Body).Decode(builds)
+	err = json.Unmarshal(b, builds)
 
 	return builds, err
 }
@@ -448,80 +376,18 @@ func (c *Client) PostBuild(buildDefinitionID int, branch string, parameters inte
 	}
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(relBuild)
-	req, err := http.NewRequest("POST", urlString, body)
+
+	b, err := c.restClient.Do("POST", urlString, body)
 	if err != nil {
 		return nil, err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	var buildResp PostBuildResponse
-	err = json.Unmarshal(b, &buildResp)
-	if err != nil {
+	if err := json.Unmarshal(b, &buildResp); err != nil {
 		return nil, err
 	}
 
 	return &buildResp, nil
-}
-
-// GetPullRequests retrieves all pull request from a source branch to a target branch
-func (c *Client) GetPullRequests(targetBranch string, sourceBranch string) (*PullRequests, error) {
-	getPullRequestsURLTemplate := "https://{instance}/DefaultCollection/{project}/_apis/git/repositories/{repository}/pullRequests?api-version={version}&status={status}&sourceRefName={sourceBranch}&targetRefName={targetBranch}"
-	r := strings.NewReplacer(
-		"{instance}", c.Instance,
-		"{project}", c.Project,
-		"{repository}", c.Repo,
-		"{version}", "3.0-preview",
-		"{status}", "Active",
-		"{sourceBranch}", fmt.Sprintf("%s/%s", "refs/heads", sourceBranch),
-		"{targetBranch}", fmt.Sprintf("%s/%s", "refs/heads", targetBranch))
-
-	urlString := r.Replace(getPullRequestsURLTemplate)
-
-	req, err := http.NewRequest("GET", urlString, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
-	}
-
-	pullRequests := &PullRequests{}
-
-	err = json.NewDecoder(resp.Body).Decode(pullRequests)
-	if err != nil {
-		return nil, err
-	}
-
-	return pullRequests, nil
 }
 
 // SubmitPullRequest creates a pull request
@@ -543,26 +409,10 @@ func (c *Client) SubmitPullRequest(targetBranch string, sourceBranch string, tit
 	}
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(pullRequest)
-	req, err := http.NewRequest("POST", urlString, body)
+
+	_, err := c.restClient.Do("POST", urlString, body)
 	if err != nil {
 		return err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	fmt.Printf("INFO: Starting PR from %s to %s...\n", sourceBranch, targetBranch)
@@ -582,29 +432,14 @@ func (c *Client) GetDiffsBetweenBranches(baseBranch string, targetBranch string)
 
 	urlString := r.Replace(getDiffsURLTemplate)
 
-	req, err := http.NewRequest("GET", urlString, nil)
+	b, err := c.restClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
 	diffs := &Diffs{}
 
-	json.NewDecoder(resp.Body).Decode(&diffs)
+	json.Unmarshal(b, &diffs)
 
 	return diffs, nil
 }
@@ -621,9 +456,16 @@ func (c *Client) GetCommit(commitID string) (*Commit, error) {
 		"changeCount", "100")
 
 	urlString := r.Replace(getCommitURLTemplate)
-	commit := &Commit{}
 
-	err := c.getJSONResponse("GET", urlString, commit)
+	b, err := c.restClient.Do("GET", urlString, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	commit := &Commit{}
+	if err := json.Unmarshal(b, commit); err != nil {
+		return nil, err
+	}
 
 	return commit, err
 }
@@ -656,18 +498,51 @@ func (c *Client) CompletePullRequest(pullRequestID int, commitID string, mergeMe
 
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(patchPullRequest)
-	req, err := http.NewRequest("PATCH", urlString, body)
+
+	_, err := c.restClient.Do("PATCH", urlString, body)
 	if err != nil {
 		return err
 	}
 
-	req.SetBasicAuth(c.Username, c.Token)
-	req.Header.Set("Content-Type", "application/json")
+	fmt.Printf("INFO: Complete PR %v...\n", pullRequestID)
+	return nil
+}
 
-	resp, err := c.httpClient.Do(req)
+// GetPullRequests returns the pull requests for la specific repository
+func (c *Client) GetPullRequests() ([]gitclient.GitPullRequest, error) {
+	prs, resp, err := c.apiClient.PullRequestsApi.GetPullRequests(c.apiAuth, c.Repo, c.Project, c.APIVersion, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
+	}
+
+	return prs, nil
+}
+
+// AddThread Create a comment on the pull request
+func (c *Client) AddThread(pullRequestID int32, comment string) error {
+	body := gitclient.GitPullRequestCommentThread{
+		Comments: []gitclient.Comment{
+			{
+				Content: comment,
+			},
+		},
+	}
+
+	_, resp, err := c.apiClient.PullRequestThreadsApi.Create(c.apiAuth, body, c.Repo, pullRequestID, c.Project, c.APIVersion)
 	if err != nil {
 		return err
 	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -678,23 +553,67 @@ func (c *Client) CompletePullRequest(pullRequestID int, commitID string, mergeMe
 		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
 	}
 
-	fmt.Printf("INFO: Complete PR %v...\n", pullRequestID)
 	return nil
 }
 
-func (c *Client) getJSONResponse(method, url string, target interface{}) error {
-	req, err := http.NewRequest(method, url, nil)
+// GetThreads lists all the threads on a pull request
+func (c *Client) GetThreads(pullRequestID int32) ([]gitclient.GitPullRequestCommentThread, error) {
+	threads, resp, err := c.apiClient.PullRequestThreadsApi.List(c.apiAuth, c.Repo, pullRequestID, c.Project, c.APIVersion, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	req.SetBasicAuth(c.Username, c.Token)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
 	defer resp.Body.Close()
 
-	err = json.NewDecoder(resp.Body).Decode(target)
-	return err
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
+	}
+
+	return threads, nil
+}
+
+// AddReviewer Create a comment on the pull request
+func (c *Client) AddReviewer(pullRequestID int32, reviewer gitclient.IdentityRefWithVote) error {
+
+	_, resp, err := c.apiClient.PullRequestReviewersApi.CreatePullRequestReviewer(c.apiAuth, reviewer, c.Repo, pullRequestID, reviewer.ID, c.Project, c.APIVersion)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
+	}
+
+	return nil
+}
+
+// AddReviewers Create a comment on the pull request
+func (c *Client) AddReviewers(pullRequestID int32, reviewers []gitclient.IdentityRef) error {
+
+	_, resp, err := c.apiClient.PullRequestReviewersApi.CreatePullRequestReviewers(c.apiAuth, reviewers, c.Repo, pullRequestID, c.Project, c.APIVersion)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("recieved non 200 status code of %d and body %s", resp.StatusCode, string(b))
+	}
+
+	return nil
 }

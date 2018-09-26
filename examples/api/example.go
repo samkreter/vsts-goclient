@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	vsts "github.com/samkreter/vsts-goclient/v2/git"
+	vsts "github.com/samkreter/vsts-goclient/api/git"
 )
 
 func main() {

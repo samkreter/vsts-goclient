@@ -10,8 +10,8 @@
 
 package swagger
 
-// 
-type IdentityRef struct {
+// Identity information including a vote on a pull request.
+type IdentityRefWithVote struct {
 	// This field contains zero or more interesting links about the graph subject. These links may be invoked to obtain additional relationships or more detailed information about this graph subject.
 	Links *ReferenceLinks `json:"_links,omitempty"`
 	// The descriptor is the primary way to reference the graph subject while the system is running. This field will uniquely identify the same graph subject across both Accounts and Organizations.
@@ -20,4 +20,8 @@ type IdentityRef struct {
 	DisplayName string `json:"displayName,omitempty"`
 	// This url is the full route to the source resource of this graph subject.
 	Url string `json:"url,omitempty"`
+	// The vote for the specific reviewer
+	Vote int `json:"vote"`
+	// The vsts identifier
+	ID string `json:"id"`
 }
