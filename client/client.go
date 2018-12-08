@@ -509,8 +509,8 @@ func (c *Client) CompletePullRequest(pullRequestID int, commitID string, mergeMe
 }
 
 // GetPullRequests returns the pull requests for la specific repository
-func (c *Client) GetPullRequests() ([]gitclient.GitPullRequest, error) {
-	prs, resp, err := c.apiClient.PullRequestsApi.GetPullRequests(c.apiAuth, c.Repo, c.Project, c.APIVersion, nil)
+func (c *Client) GetPullRequests(localVarOptionals *gitclient.GetPullRequestsOpts) ([]gitclient.GitPullRequest, error) {
+	prs, resp, err := c.apiClient.PullRequestsApi.GetPullRequests(c.apiAuth, c.Repo, c.Project, c.APIVersion, localVarOptionals)
 	if err != nil {
 		return nil, err
 	}
@@ -557,8 +557,8 @@ func (c *Client) AddThread(pullRequestID int32, comment string) error {
 }
 
 // GetThreads lists all the threads on a pull request
-func (c *Client) GetThreads(pullRequestID int32) ([]gitclient.GitPullRequestCommentThread, error) {
-	threads, resp, err := c.apiClient.PullRequestThreadsApi.List(c.apiAuth, c.Repo, pullRequestID, c.Project, c.APIVersion, nil)
+func (c *Client) GetThreads(pullRequestID int32, localVarOptionals *gitclient.ListPRThreadsOpts) ([]gitclient.GitPullRequestCommentThread, error) {
+	threads, resp, err := c.apiClient.PullRequestThreadsApi.List(c.apiAuth, c.Repo, pullRequestID, c.Project, c.APIVersion, localVarOptionals)
 	if err != nil {
 		return nil, err
 	}
