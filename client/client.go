@@ -15,13 +15,15 @@ import (
 	gitclient "github.com/samkreter/vsts-goclient/api/git"
 )
 
-type restClient struct {
+// RestClient client to handle auth when calling the azure devops api
+type RestClient struct {
 	username   string
 	token      string
 	httpClient *http.Client
 }
 
-func (c *restClient) Do(method, url string, body io.Reader) ([]byte, error) {
+// Do perform an authenticated request to azure devops api
+func (c *RestClient) Do(method, url string, body io.Reader) ([]byte, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
@@ -52,7 +54,7 @@ type Client struct {
 	Project    string
 	Repo       string
 	APIVersion string
-	restClient *restClient
+	RestClient *RestClient
 	apiClient  *gitclient.APIClient
 	apiAuth    context.Context
 }
@@ -79,7 +81,7 @@ func NewClient(config *Config) (*Client, error) {
 	})
 
 	// Note: Using the old version rest client until all api routes are updated to use the generated client
-	rClient := &restClient{
+	rClient := &RestClient{
 		username:   config.Username,
 		token:      config.Token,
 		httpClient: &http.Client{},
@@ -92,7 +94,7 @@ func NewClient(config *Config) (*Client, error) {
 		Repo:       config.RepositoryName,
 		apiClient:  apiClient,
 		apiAuth:    auth,
-		restClient: rClient,
+		RestClient: rClient,
 	}, nil
 }
 
@@ -108,7 +110,7 @@ func (c *Client) GetBranches(branchName string) (*Refs, error) {
 
 	urlString := r.Replace(getBranchURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +137,7 @@ func (c *Client) GetBranch(branchName string) (*Ref, error) {
 
 	urlString := r.Replace(getBranchURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +184,7 @@ func (c *Client) CreateBranch(newBranchName string, commitID string) error {
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode([]Branch{newBranch})
 
-	_, err := c.restClient.Do("POST", urlString, body)
+	_, err := c.RestClient.Do("POST", urlString, body)
 	if err != nil {
 		return err
 	}
@@ -209,7 +211,7 @@ func (c *Client) GetCommits(branch string, startTime time.Time, endTime time.Tim
 
 	urlString := r.Replace(getCommitsURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +236,7 @@ func (c *Client) GetFileFromRepo(branchName string, filePath string, target inte
 
 	urlString := r.Replace(getItemURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return err
 	}
@@ -295,7 +297,7 @@ func (c *Client) CommitChanges(changes interface{}, branchName, commitID, change
 		return err
 	}
 
-	_, err = c.restClient.Do("POST", urlString, body)
+	_, err = c.RestClient.Do("POST", urlString, body)
 	if err != nil {
 		return err
 	}
@@ -317,7 +319,7 @@ func (c *Client) GetBuildDefinitions(definitionPath, definitionName string) (*De
 
 	urlString := r.Replace(getDefinitionsURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +343,7 @@ func (c *Client) GetBuilds(buildDefinitionID int) (*Builds, error) {
 
 	urlString := r.Replace(getBuildsURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +379,7 @@ func (c *Client) PostBuild(buildDefinitionID int, branch string, parameters inte
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(relBuild)
 
-	b, err := c.restClient.Do("POST", urlString, body)
+	b, err := c.RestClient.Do("POST", urlString, body)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +412,7 @@ func (c *Client) SubmitPullRequest(targetBranch string, sourceBranch string, tit
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(pullRequest)
 
-	_, err := c.restClient.Do("POST", urlString, body)
+	_, err := c.RestClient.Do("POST", urlString, body)
 	if err != nil {
 		return err
 	}
@@ -432,7 +434,7 @@ func (c *Client) GetDiffsBetweenBranches(baseBranch string, targetBranch string)
 
 	urlString := r.Replace(getDiffsURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +459,7 @@ func (c *Client) GetCommit(commitID string) (*Commit, error) {
 
 	urlString := r.Replace(getCommitURLTemplate)
 
-	b, err := c.restClient.Do("GET", urlString, nil)
+	b, err := c.RestClient.Do("GET", urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +501,7 @@ func (c *Client) CompletePullRequest(pullRequestID int, commitID string, mergeMe
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(patchPullRequest)
 
-	_, err := c.restClient.Do("PATCH", urlString, body)
+	_, err := c.RestClient.Do("PATCH", urlString, body)
 	if err != nil {
 		return err
 	}
