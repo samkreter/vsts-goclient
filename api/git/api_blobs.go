@@ -11,12 +11,13 @@
 package swagger
 
 import (
+	"context"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
-	"context"
-	"fmt"
+
 	"github.com/antihax/optional"
 )
 
@@ -27,7 +28,7 @@ var (
 
 type BlobsApiService service
 
-/* 
+/*
 BlobsApiService
 Get a single blob.  Repositories have both a name and an identifier. Identifiers are globally unique, but several projects may contain a repository of the same name. You don&#39;t need to include the project if you specify a repository by ID. However, if you specify a repository by name, you must also specify the project (by name or ID).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -44,19 +45,19 @@ Get a single blob.  Repositories have both a name and an identifier. Identifiers
 @return GitBlobRef
 */
 
-type GetBlobOpts struct { 
-	Download optional.Bool
-	FileName optional.String
-	Format optional.String
+type GetBlobOpts struct {
+	Download   optional.Bool
+	FileName   optional.String
+	Format     optional.String
 	ResolveLfs optional.Bool
 }
 
 func (a *BlobsApiService) GetBlob(ctx context.Context, repositoryId string, sha1 string, project string, apiVersion string, localVarOptionals *GetBlobOpts) (GitBlobRef, *http.Response, error) {
 	var (
-		localVarHttpMethod = strings.ToUpper("Get")
-		localVarPostBody   interface{}
-		localVarFileName   string
-		localVarFileBytes  []byte
+		localVarHttpMethod  = strings.ToUpper("Get")
+		localVarPostBody    interface{}
+		localVarFileName    string
+		localVarFileBytes   []byte
 		localVarReturnValue GitBlobRef
 	)
 
@@ -118,18 +119,18 @@ func (a *BlobsApiService) GetBlob(ctx context.Context, repositoryId string, sha1
 
 	if localVarHttpResponse.StatusCode < 300 {
 		// If we succeed, return the data, otherwise pass on to decode error.
-		err = a.client.decode(&localVarReturnValue, localVarBody, localVarHttpResponse.Header.Get("Content-Type"));
-		if err == nil { 
+		err = a.client.decode(&localVarReturnValue, localVarBody, localVarHttpResponse.Header.Get("Content-Type"))
+		if err == nil {
 			return localVarReturnValue, localVarHttpResponse, err
 		}
 	}
 
 	if localVarHttpResponse.StatusCode >= 300 {
 		newErr := GenericSwaggerError{
-			body: localVarBody,
+			body:  localVarBody,
 			error: localVarHttpResponse.Status,
 		}
-		
+
 		if localVarHttpResponse.StatusCode == 200 {
 			localVarBody, err := ioutil.ReadAll(localVarHttpResponse.Body)
 			if err != nil {
@@ -137,22 +138,22 @@ func (a *BlobsApiService) GetBlob(ctx context.Context, repositoryId string, sha1
 			}
 
 			var v GitBlobRef
-			err = a.client.decode(&v, localVarBody, localVarHttpResponse.Header.Get("Content-Type"));
-				if err != nil {
-					newErr.error = err.Error()
-					return localVarReturnValue, localVarHttpResponse, newErr
-				}
-				newErr.model = v
+			err = a.client.decode(&v, localVarBody, localVarHttpResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
 				return localVarReturnValue, localVarHttpResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHttpResponse, newErr
 		}
-		
+
 		return localVarReturnValue, localVarHttpResponse, newErr
 	}
 
 	return localVarReturnValue, localVarHttpResponse, nil
 }
 
-/* 
+/*
 BlobsApiService
 Gets one or more blobs in a zip file download.
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -161,21 +162,21 @@ Gets one or more blobs in a zip file download.
  * @param project Project ID or project name
  * @param apiVersion Version of the API to use.  This should be set to &#39;5.0-preview.1&#39; to use this version of the api.
  * @param optional nil or *GetBlobsZipOpts - Optional Parameters:
-     * @param "Filename" (optional.String) -  
+     * @param "Filename" (optional.String) -
 
 @return string
 */
 
-type GetBlobsZipOpts struct { 
+type GetBlobsZipOpts struct {
 	Filename optional.String
 }
 
 func (a *BlobsApiService) GetBlobsZip(ctx context.Context, body []string, repositoryId string, project string, apiVersion string, localVarOptionals *GetBlobsZipOpts) (string, *http.Response, error) {
 	var (
-		localVarHttpMethod = strings.ToUpper("Post")
-		localVarPostBody   interface{}
-		localVarFileName   string
-		localVarFileBytes  []byte
+		localVarHttpMethod  = strings.ToUpper("Post")
+		localVarPostBody    interface{}
+		localVarFileName    string
+		localVarFileBytes   []byte
 		localVarReturnValue string
 	)
 
@@ -229,18 +230,18 @@ func (a *BlobsApiService) GetBlobsZip(ctx context.Context, body []string, reposi
 
 	if localVarHttpResponse.StatusCode < 300 {
 		// If we succeed, return the data, otherwise pass on to decode error.
-		err = a.client.decode(&localVarReturnValue, localVarBody, localVarHttpResponse.Header.Get("Content-Type"));
-		if err == nil { 
+		err = a.client.decode(&localVarReturnValue, localVarBody, localVarHttpResponse.Header.Get("Content-Type"))
+		if err == nil {
 			return localVarReturnValue, localVarHttpResponse, err
 		}
 	}
 
 	if localVarHttpResponse.StatusCode >= 300 {
 		newErr := GenericSwaggerError{
-			body: localVarBody,
+			body:  localVarBody,
 			error: localVarHttpResponse.Status,
 		}
-		
+
 		if localVarHttpResponse.StatusCode == 200 {
 			localVarBody, err := ioutil.ReadAll(localVarHttpResponse.Body)
 			if err != nil {
@@ -248,15 +249,15 @@ func (a *BlobsApiService) GetBlobsZip(ctx context.Context, body []string, reposi
 			}
 
 			var v string
-			err = a.client.decode(&v, localVarBody, localVarHttpResponse.Header.Get("Content-Type"));
-				if err != nil {
-					newErr.error = err.Error()
-					return localVarReturnValue, localVarHttpResponse, newErr
-				}
-				newErr.model = v
+			err = a.client.decode(&v, localVarBody, localVarHttpResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
 				return localVarReturnValue, localVarHttpResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHttpResponse, newErr
 		}
-		
+
 		return localVarReturnValue, localVarHttpResponse, newErr
 	}
 
